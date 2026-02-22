@@ -5,13 +5,23 @@ import {
   Activity, DollarSign, BarChart2, Zap, Award, Shield
 } from 'lucide-react';
 import { useTradeStore } from '@/store/useTradeStore';
+import { useAccountStore } from '@/store/useAccountStore';
 import { computeMetrics } from '@/lib/calculations';
 import { formatCurrency, formatPercent } from '@/lib/calculations';
+import { accountToSettings } from '@/types';
 import MetricCard from './MetricCard';
 import clsx from 'clsx';
 
+const defaultSettings = {
+  accountSize: 100000, startingBalance: 100000, maxDailyRiskPercent: 5,
+  maxDrawdownPercent: 10, profitTargetPercent: 10, tradingStyle: 'day' as const,
+  currency: 'USD', trailingDrawdown: false,
+};
+
 export default function RiskDashboard() {
-  const { trades, settings } = useTradeStore();
+  const { trades } = useTradeStore();
+  const { activeAccount } = useAccountStore();
+  const settings = activeAccount ? accountToSettings(activeAccount) : defaultSettings;
   const m = computeMetrics(trades, settings);
 
   const isDailyLimitWarning = m.dailyLossPercent >= 80;

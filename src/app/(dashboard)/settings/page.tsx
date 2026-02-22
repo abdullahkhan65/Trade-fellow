@@ -23,6 +23,103 @@ const accountTypeBadge: Record<string, string> = {
   personal: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
 };
 
+const inputClass = 'w-full bg-[#1a1f2e] border border-[#2a2f3e] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors';
+
+function FormFields({ data, onChange, onPreset }: {
+  data: Partial<Account>;
+  onChange: (d: Partial<Account>) => void;
+  onPreset: (p: typeof propFirmPresets[0]) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1.5">Account Name *</label>
+          <input type="text" value={data.name ?? ''} onChange={(e) => onChange({ ...data, name: e.target.value })} placeholder="FTMO 100k Funded" className={inputClass} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1.5">Prop Firm / Broker</label>
+          <input type="text" value={data.broker ?? ''} onChange={(e) => onChange({ ...data, broker: e.target.value })} placeholder="FTMO" className={inputClass} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1.5">Account Number</label>
+          <input type="text" value={data.account_number ?? ''} onChange={(e) => onChange({ ...data, account_number: e.target.value })} placeholder="12345678" className={inputClass} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1.5">Account Type</label>
+          <select value={data.account_type ?? 'funded'} onChange={(e) => onChange({ ...data, account_type: e.target.value as AccountType })} className={inputClass}>
+            <option value="challenge">Challenge / Evaluation</option>
+            <option value="funded">Funded Account</option>
+            <option value="personal">Personal Account</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1.5">Starting Balance</label>
+          <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+            <input type="number" value={data.starting_balance ?? ''} onChange={(e) => { const v = parseFloat(e.target.value); onChange({ ...data, starting_balance: isNaN(v) ? undefined : v }); }} className={`${inputClass} pl-7`} step="1000" />
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1.5">Currency</label>
+          <select value={data.currency ?? 'USD'} onChange={(e) => onChange({ ...data, currency: e.target.value })} className={inputClass}>
+            {['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD'].map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1.5">Max Daily Loss %</label>
+          <div className="relative">
+            <input type="number" value={data.max_daily_risk_percent ?? ''} onChange={(e) => { const v = parseFloat(e.target.value); onChange({ ...data, max_daily_risk_percent: isNaN(v) ? undefined : v }); }} className={`${inputClass} pr-8`} step="0.5" />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
+          </div>
+          <p className="text-xs text-gray-600 mt-1">= ${((data.max_daily_risk_percent ?? 5) / 100 * (data.starting_balance ?? 100000)).toFixed(0)}</p>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1.5">Max Drawdown %</label>
+          <div className="relative">
+            <input type="number" value={data.max_drawdown_percent ?? ''} onChange={(e) => { const v = parseFloat(e.target.value); onChange({ ...data, max_drawdown_percent: isNaN(v) ? undefined : v }); }} className={`${inputClass} pr-8`} step="0.5" />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1.5">Profit Target %</label>
+          <div className="relative">
+            <input type="number" value={data.profit_target_percent ?? ''} onChange={(e) => { const v = parseFloat(e.target.value); onChange({ ...data, profit_target_percent: isNaN(v) ? undefined : v }); }} className={`${inputClass} pr-8`} step="0.5" />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1.5">Trading Style</label>
+          <select value={data.trading_style ?? 'day'} onChange={(e) => onChange({ ...data, trading_style: e.target.value as TradingStyle })} className={inputClass}>
+            <option value="scalping">Scalping</option>
+            <option value="day">Day Trading</option>
+            <option value="swing">Swing Trading</option>
+          </select>
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={() => onChange({ ...data, trailing_drawdown: !data.trailing_drawdown })} className={clsx('relative w-11 h-6 rounded-full border transition-all', data.trailing_drawdown ? 'bg-blue-600 border-blue-500' : 'bg-[#1a1f2e] border-[#2a2f3e]')}>
+          <span className={clsx('absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform', data.trailing_drawdown ? 'translate-x-[22px]' : 'translate-x-0.5')} />
+        </button>
+        <div>
+          <p className="text-sm text-gray-300">Trailing Drawdown (FTMO style)</p>
+          <p className="text-xs text-gray-600">Track drawdown from account peak</p>
+        </div>
+      </div>
+      <div>
+        <p className="text-xs font-medium text-gray-500 mb-2">Prop Firm Quick Presets</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {propFirmPresets.map((p) => (
+            <button key={p.name} type="button" onClick={() => onPreset(p)} className="p-2.5 bg-[#1a1f2e] hover:bg-[#2a2f3e] border border-[#2a2f3e] rounded-xl text-left transition-colors">
+              <p className="text-xs font-semibold text-white">{p.name}</p>
+              <p className="text-xs text-gray-600 mt-0.5">{p.daily}% daily / {p.drawdown}% DD</p>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { accounts, activeAccountId, activeAccount, fetchAccounts, createAccount, updateAccount, deleteAccount, setActiveAccount } = useAccountStore();
   const { updateSettings } = useTradeStore();
@@ -78,97 +175,6 @@ export default function SettingsPage() {
     if (target === 'form') setForm((f) => ({ ...f, ...update }));
     else setNewForm((f) => ({ ...f, ...update }));
   };
-
-  const inputClass = 'w-full bg-[#1a1f2e] border border-[#2a2f3e] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors';
-
-  const FormFields = ({ data, onChange, onPreset }: { data: Partial<Account>; onChange: (d: Partial<Account>) => void; onPreset: (p: typeof propFirmPresets[0]) => void }) => (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">Account Name *</label>
-          <input type="text" value={data.name ?? ''} onChange={(e) => onChange({ ...data, name: e.target.value })} placeholder="FTMO 100k Funded" className={inputClass} />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">Prop Firm / Broker</label>
-          <input type="text" value={data.broker ?? ''} onChange={(e) => onChange({ ...data, broker: e.target.value })} placeholder="FTMO" className={inputClass} />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">Account Number</label>
-          <input type="text" value={data.account_number ?? ''} onChange={(e) => onChange({ ...data, account_number: e.target.value })} placeholder="12345678" className={inputClass} />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">Account Type</label>
-          <select value={data.account_type ?? 'funded'} onChange={(e) => onChange({ ...data, account_type: e.target.value as AccountType })} className={inputClass}>
-            <option value="challenge">Challenge / Evaluation</option>
-            <option value="funded">Funded Account</option>
-            <option value="personal">Personal Account</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">Starting Balance</label>
-          <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
-            <input type="number" value={data.starting_balance ?? 100000} onChange={(e) => onChange({ ...data, starting_balance: parseFloat(e.target.value) || 0 })} className={`${inputClass} pl-7`} step="1000" />
-          </div>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">Currency</label>
-          <select value={data.currency ?? 'USD'} onChange={(e) => onChange({ ...data, currency: e.target.value })} className={inputClass}>
-            {['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD'].map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">Max Daily Loss %</label>
-          <div className="relative">
-            <input type="number" value={data.max_daily_risk_percent ?? 5} onChange={(e) => onChange({ ...data, max_daily_risk_percent: parseFloat(e.target.value) })} className={`${inputClass} pr-8`} step="0.5" />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
-          </div>
-          <p className="text-xs text-gray-600 mt-1">= ${((data.max_daily_risk_percent ?? 5) / 100 * (data.starting_balance ?? 100000)).toFixed(0)}</p>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">Max Drawdown %</label>
-          <div className="relative">
-            <input type="number" value={data.max_drawdown_percent ?? 10} onChange={(e) => onChange({ ...data, max_drawdown_percent: parseFloat(e.target.value) })} className={`${inputClass} pr-8`} step="0.5" />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
-          </div>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">Profit Target %</label>
-          <div className="relative">
-            <input type="number" value={data.profit_target_percent ?? 10} onChange={(e) => onChange({ ...data, profit_target_percent: parseFloat(e.target.value) })} className={`${inputClass} pr-8`} step="0.5" />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
-          </div>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">Trading Style</label>
-          <select value={data.trading_style ?? 'day'} onChange={(e) => onChange({ ...data, trading_style: e.target.value as TradingStyle })} className={inputClass}>
-            <option value="scalping">Scalping</option>
-            <option value="day">Day Trading</option>
-            <option value="swing">Swing Trading</option>
-          </select>
-        </div>
-      </div>
-      <div className="flex items-center gap-3">
-        <button type="button" onClick={() => onChange({ ...data, trailing_drawdown: !data.trailing_drawdown })} className={clsx('relative w-11 h-6 rounded-full border transition-all', data.trailing_drawdown ? 'bg-blue-600 border-blue-500' : 'bg-[#1a1f2e] border-[#2a2f3e]')}>
-          <span className={clsx('absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform', data.trailing_drawdown ? 'translate-x-[22px]' : 'translate-x-0.5')} />
-        </button>
-        <div>
-          <p className="text-sm text-gray-300">Trailing Drawdown (FTMO style)</p>
-          <p className="text-xs text-gray-600">Track drawdown from account peak</p>
-        </div>
-      </div>
-      <div>
-        <p className="text-xs font-medium text-gray-500 mb-2">Prop Firm Quick Presets</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {propFirmPresets.map((p) => (
-            <button key={p.name} type="button" onClick={() => onPreset(p)} className="p-2.5 bg-[#1a1f2e] hover:bg-[#2a2f3e] border border-[#2a2f3e] rounded-xl text-left transition-colors">
-              <p className="text-xs font-semibold text-white">{p.name}</p>
-              <p className="text-xs text-gray-600 mt-0.5">{p.daily}% daily / {p.drawdown}% DD</p>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <div className="p-6 max-w-4xl mx-auto">

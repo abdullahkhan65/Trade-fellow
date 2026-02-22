@@ -24,7 +24,8 @@ interface TradeStore {
   updateTrade: (id: string, trade: Partial<Trade>) => Promise<void>;
   deleteTrade: (id: string) => Promise<void>;
   closeTrade: (id: string, exit: number) => Promise<void>;
-  bulkInsertTrades: (trades: Omit<Trade, 'id' | 'riskAmount' | 'riskPercent' | 'pnl' | 'rMultiple'>[], accountId: string) => Promise<{ inserted: number; skipped: number }>;
+  // pnl is optional here so MT5-imported trades can carry the actual platform profit
+  bulkInsertTrades: (trades: Omit<Trade, 'id' | 'riskAmount' | 'riskPercent' | 'rMultiple'>[], accountId: string) => Promise<{ inserted: number; skipped: number }>;
   // Settings
   updateSettings: (settings: Partial<Settings>) => void;
   // Local fallback
@@ -48,11 +49,14 @@ function computeTradeFields(tradeInput: Partial<Trade>, settings: Settings): Par
     ? calculateRisk(tradeInput.entry, tradeInput.stopLoss, tradeInput.positionSize, settings.startingBalance, tradeInput.direction!)
     : { riskAmount: 0, riskPercent: 0 };
 
-  let pnl: number | null = null;
+  // Preserve existing pnl (e.g. actual MT5 platform profit) — only calculate if not already set
+  let pnl: number | null = tradeInput.pnl ?? null;
   let rMultiple: number | null = null;
 
   if (tradeInput.status === 'closed' && tradeInput.exit && tradeInput.entry && tradeInput.positionSize) {
-    pnl = calculatePnL(tradeInput.entry, tradeInput.exit, tradeInput.positionSize, tradeInput.direction!);
+    if (pnl === null) {
+      pnl = calculatePnL(tradeInput.entry, tradeInput.exit, tradeInput.positionSize, tradeInput.direction!);
+    }
     if (tradeInput.stopLoss) {
       rMultiple = calculateRMultiple(tradeInput.entry, tradeInput.exit, tradeInput.stopLoss, tradeInput.direction!);
     }
@@ -230,7 +234,7 @@ export const useTradeStore = create<TradeStore>()(
         }
       },
 
-      bulkInsertTrades: async (tradesInput, accountId) => {
+      bulkInsertTrades: async (tradesInput: Omit<Trade, 'id' | 'riskAmount' | 'riskPercent' | 'rMultiple'>[], accountId: string) => {
         const { settings } = get();
         const supabase = createClient();
         const { data: { user } } = await supabase.auth.getUser();
