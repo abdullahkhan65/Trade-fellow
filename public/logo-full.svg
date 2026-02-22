@@ -1,0 +1,21 @@
+<svg width="654" height="128" viewBox="0 0 654 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TradeFellow">
+  <defs>
+    <linearGradient id="tradefellow-full" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0EA5E9" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+  </defs>
+  <g>
+    <rect x="4" y="4" width="120" height="120" rx="28" fill="#0B1323" />
+    <rect x="12" y="12" width="104" height="104" rx="24" fill="url(#tradefellow-full)" opacity="0.16" />
+    <path d="M28 84L50 61L64 74L98 40" fill="none" stroke="url(#tradefellow-full)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="28" cy="84" r="5" fill="#38BDF8" />
+    <circle cx="50" cy="61" r="5" fill="#38BDF8" />
+    <circle cx="64" cy="74" r="5" fill="#38BDF8" />
+    <circle cx="98" cy="40" r="5" fill="#38BDF8" />
+  </g>
+  <g fill="#F8FAFC" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif">
+    <text x="148" y="63" font-size="46" font-weight="740" letter-spacing="0.2">TradeFellow</text>
+    <text x="150" y="95" font-size="18" font-weight="500" fill="#93C5FD">Trading Journal &amp; Risk Operating System</text>
+  </g>
+</svg>

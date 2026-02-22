@@ -2,13 +2,14 @@ import Papa from 'papaparse';
 import { Trade, TradeDirection, TradingStyle } from '@/types';
 
 interface MT5Row {
-  [key: string]: string;
+  [key: string]: string | undefined;
 }
 
 // MT5 History CSV column names (various export formats)
 const COL_ALIASES: Record<string, string[]> = {
   ticket:     ['Ticket', 'ticket', 'Order', 'Deal', 'Position'],
   openTime:   ['Open Time', 'Time', 'Open time', 'OpenTime', 'open_time', 'Time (open)'],
+  closeTime:  ['Close Time', 'Time (close)', 'Close time', 'close_time'],
   // "Item" is used in some MT5 CSV exports instead of "Symbol"
   symbol:     ['Symbol', 'symbol', 'Instrument', 'Item', 'item'],
   type:       ['Type', 'type', 'Direction', 'Action'],
@@ -24,10 +25,27 @@ const COL_ALIASES: Record<string, string[]> = {
   comment:    ['Comment', 'comment', 'Note'],
 };
 
-function findCol(row: MT5Row, fieldName: string): string {
-  const aliases = COL_ALIASES[fieldName] ?? [];
+const NORMALIZED_ALIASES = Object.fromEntries(
+  Object.entries(COL_ALIASES).map(([field, aliases]) => [field, aliases.map(normalizeKey)])
+) as Record<string, string[]>;
+
+function normalizeKey(key: string): string {
+  return key.toLowerCase().replace(/\uFEFF/g, '').replace(/[^a-z0-9]/g, '');
+}
+
+function buildRowLookup(row: MT5Row): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const [key, value] of Object.entries(row)) {
+    map.set(normalizeKey(key), (value ?? '').toString().trim());
+  }
+  return map;
+}
+
+function findCol(rowLookup: Map<string, string>, fieldName: string): string {
+  const aliases = NORMALIZED_ALIASES[fieldName] ?? [];
   for (const alias of aliases) {
-    if (alias in row) return row[alias]?.trim() ?? '';
+    const value = rowLookup.get(alias);
+    if (value) return value;
   }
   return '';
 }
@@ -40,8 +58,25 @@ function detectDirection(type: string): TradeDirection {
 
 function parseDate(dateStr: string): string {
   if (!dateStr) return new Date().toISOString().slice(0, 10);
-  // MT5 format: "2025.01.15 08:30:00" or "2025-01-15 08:30"
-  const cleaned = dateStr.replace(/\./g, '-').split(' ')[0];
+  // MT5 formats commonly seen:
+  // - "2025.01.15 08:30:00"
+  // - "2025-01-15 08:30"
+  // - "15.01.2025 08:30"
+  const base = dateStr.trim().replace(/\./g, '-');
+  const cleaned = base.split(' ')[0];
+
+  const ymd = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (ymd) {
+    const [, y, m, d] = ymd;
+    return `${y.padStart(4, '0')}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+
+  const dmy = cleaned.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (dmy) {
+    const [, d, m, y] = dmy;
+    return `${y.padStart(4, '0')}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+
   try {
     const d = new Date(cleaned);
     if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
@@ -51,8 +86,118 @@ function parseDate(dateStr: string): string {
 
 function parseNum(str: string): number | null {
   if (!str) return null;
-  const n = parseFloat(str.replace(',', '.').replace(/[^0-9.-]/g, ''));
+  const raw = str.trim().replace(/\s+/g, '');
+  if (!raw) return null;
+
+  const cleaned = raw.replace(/[^0-9,.-]/g, '');
+  if (!cleaned) return null;
+
+  const commaCount = (cleaned.match(/,/g) ?? []).length;
+  const dotCount = (cleaned.match(/\./g) ?? []).length;
+
+  let normalized = cleaned;
+  if (commaCount > 0 && dotCount > 0) {
+    // Decide decimal separator by whichever appears last.
+    const lastComma = cleaned.lastIndexOf(',');
+    const lastDot = cleaned.lastIndexOf('.');
+    if (lastComma > lastDot) {
+      normalized = cleaned.replace(/\./g, '').replace(',', '.');
+    } else {
+      normalized = cleaned.replace(/,/g, '');
+    }
+  } else if (commaCount > 0 && dotCount === 0) {
+    normalized = cleaned.replace(',', '.');
+  }
+
+  const n = Number(normalized);
   return isNaN(n) ? null : n;
+}
+
+function detectDelimiter(text: string): string {
+  const firstLine = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .find((l) => l.length > 0) ?? '';
+
+  const candidates = [',', ';', '\t'];
+  let best = ',';
+  let bestCount = -1;
+  for (const c of candidates) {
+    const count = (firstLine.match(new RegExp(`\\${c}`, 'g')) ?? []).length;
+    if (count > bestCount) {
+      best = c;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+function decodeHtmlEntities(input: string): string {
+  const named = input
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+
+  return named.replace(/&#(\d+);/g, (_, num) => {
+    const code = Number(num);
+    return Number.isFinite(code) ? String.fromCharCode(code) : '';
+  });
+}
+
+function stripHtml(input: string): string {
+  return decodeHtmlEntities(input.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+}
+
+function escapeCSVCell(value: string): string {
+  if (/["\n,;]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+function tableToCSV(tableHtml: string): string {
+  const rowMatches = tableHtml.match(/<tr[\s\S]*?<\/tr>/gi) ?? [];
+  const rows: string[][] = [];
+
+  for (const rowHtml of rowMatches) {
+    const cellMatches = rowHtml.match(/<t[hd][\s\S]*?<\/t[hd]>/gi) ?? [];
+    if (cellMatches.length === 0) continue;
+    const cells = cellMatches.map((cell) => stripHtml(cell));
+    rows.push(cells);
+  }
+
+  return rows
+    .filter((row) => row.some((cell) => cell.trim().length > 0))
+    .map((row) => row.map(escapeCSVCell).join(','))
+    .join('\n');
+}
+
+function normalizeInput(rawInput: string): string {
+  const text = rawInput.replace(/^\uFEFF/, '').trim();
+  if (!/<table[\s\S]*?>/i.test(text)) return text;
+
+  const tables = text.match(/<table[\s\S]*?<\/table>/gi) ?? [];
+  if (tables.length === 0) return text;
+
+  let bestTable = tables[0] ?? '';
+  let bestScore = -1;
+  for (const table of tables) {
+    const plain = stripHtml(table).toLowerCase();
+    const headerSignals = ['symbol', 'item', 'ticket', 'type', 'volume', 'profit'];
+    const headerScore = headerSignals.reduce((s, key) => s + (plain.includes(key) ? 1 : 0), 0);
+    const rowScore = (table.match(/<tr[\s\S]*?<\/tr>/gi) ?? []).length;
+    const score = headerScore * 100 + rowScore;
+    if (score > bestScore) {
+      bestTable = table;
+      bestScore = score;
+    }
+  }
+
+  const csvFromTable = tableToCSV(bestTable);
+  return csvFromTable || text;
 }
 
 export interface ParseResult {
@@ -63,39 +208,44 @@ export interface ParseResult {
 }
 
 export function parseMT5CSV(csvText: string): ParseResult {
-  const result = Papa.parse<MT5Row>(csvText, {
+  const normalizedInput = normalizeInput(csvText);
+  const result = Papa.parse<MT5Row>(normalizedInput, {
     header: true,
     skipEmptyLines: true,
+    delimiter: detectDelimiter(normalizedInput),
     transformHeader: (h) => h.trim(),
   });
 
   const trades: ParseResult['trades'] = [];
-  const errors: string[] = [];
+  const errors: string[] = result.errors.map((err) => `Line ${err.row ?? 'unknown'}: ${err.message}`);
 
   for (let i = 0; i < result.data.length; i++) {
     const row = result.data[i];
     try {
-      const ticket     = findCol(row, 'ticket');
-      const symbol     = findCol(row, 'symbol');
-      const type       = findCol(row, 'type');
-      const lotsStr    = findCol(row, 'lots');
-      const openPriceStr  = findCol(row, 'openPrice');
-      const slStr      = findCol(row, 'sl');
-      const tpStr      = findCol(row, 'tp');
-      const closePriceStr = findCol(row, 'closePrice');
-      const profitStr  = findCol(row, 'profit');
-      const commissionStr = findCol(row, 'commission');
-      const swapStr    = findCol(row, 'swap');
-      const dateStr    = findCol(row, 'openTime');
-      const comment    = findCol(row, 'comment');
+      const rowLookup = buildRowLookup(row);
+      const ticket     = findCol(rowLookup, 'ticket');
+      const symbol     = findCol(rowLookup, 'symbol');
+      const type       = findCol(rowLookup, 'type');
+      const lotsStr    = findCol(rowLookup, 'lots');
+      const openPriceStr  = findCol(rowLookup, 'openPrice');
+      const slStr      = findCol(rowLookup, 'sl');
+      const tpStr      = findCol(rowLookup, 'tp');
+      const closePriceStr = findCol(rowLookup, 'closePrice');
+      const profitStr  = findCol(rowLookup, 'profit');
+      const commissionStr = findCol(rowLookup, 'commission');
+      const swapStr    = findCol(rowLookup, 'swap');
+      const openDateStr = findCol(rowLookup, 'openTime');
+      const closeDateStr = findCol(rowLookup, 'closeTime');
+      const dateStr    = openDateStr || closeDateStr;
+      const comment    = findCol(rowLookup, 'comment');
 
       if (!symbol || !lotsStr || !openPriceStr) continue;
 
       // Skip balance/deposit/withdrawal rows
       if (['balance', 'deposit', 'withdrawal', 'credit'].some((kw) => type.toLowerCase().includes(kw))) continue;
 
-      const lots      = parseFloat(lotsStr.replace(',', '.')) || 0;
-      const entry     = parseFloat(openPriceStr.replace(',', '.')) || 0;
+      const lots      = parseNum(lotsStr) ?? 0;
+      const entry     = parseNum(openPriceStr) ?? 0;
       const sl        = parseNum(slStr) ?? (entry * (type.toLowerCase().includes('sell') ? 1.002 : 0.998));
       const tp        = parseNum(tpStr);
       const exit      = parseNum(closePriceStr);
@@ -120,7 +270,7 @@ export function parseMT5CSV(csvText: string): ParseResult {
         pnl:           netPnl,
         status:        exit !== null ? 'closed' : 'open',
         tradingStyle:  'day' as TradingStyle,
-        notes:         comment || `Imported from MT5 (Ticket: ${ticket})`,
+        notes:         comment || (ticket ? `Imported from MT5 (Ticket: ${ticket})` : 'Imported from MT5'),
         tags:          ['mt5-import'],
         mt5_ticket:    ticket || null,
       });

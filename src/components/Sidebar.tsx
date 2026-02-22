@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, BookOpen, BarChart3, Settings, FileText,
-  Activity, TrendingUp, Shield, Calendar, Calculator, Plug, LogOut, User,
+  Activity, Shield, Calendar, Calculator, Plug, LogOut, User,
   Trophy, Flame
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -14,6 +14,7 @@ import { computeMetrics, formatCurrency } from '@/lib/calculations';
 import { accountToSettings } from '@/types';
 import { createClient } from '@/lib/supabase/client';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
+import BrandLogo from './BrandLogo';
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -78,15 +79,7 @@ export default function Sidebar({ user }: SidebarProps) {
     <aside className="w-60 shrink-0 bg-[#0a0d14] border-r border-[#1a1f2e] flex flex-col min-h-screen">
       {/* Logo */}
       <div className="px-5 py-5 border-b border-[#1a1f2e]">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-            <TrendingUp className="w-4 h-4 text-white" />
-          </div>
-          <div>
-            <p className="text-sm font-bold text-white tracking-tight">PropTrader</p>
-            <p className="text-xs text-gray-600">Risk Dashboard</p>
-          </div>
-        </div>
+        <BrandLogo compact subtitle="Risk Dashboard" />
       </div>
 
       {/* Quick Stats */}

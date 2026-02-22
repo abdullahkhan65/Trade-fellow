@@ -24,13 +24,14 @@ const BIAS_OPTIONS = [
 ] as const;
 
 export default function JournalPage() {
-  const { todayJournal, fetchTodayJournal, upsertJournal } = useGoalStore();
-  const { activeAccount } = useAccountStore();
+  const { fetchJournal, upsertJournal } = useGoalStore();
+  const { activeAccount, loading: accountsLoading } = useAccountStore();
   const { trades } = useTradeStore();
 
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Morning fields
   const [bias, setBias] = useState<'bullish' | 'bearish' | 'neutral' | 'mixed' | null>(null);
@@ -48,53 +49,90 @@ export default function JournalPage() {
   const today = format(new Date(), 'yyyy-MM-dd');
   const isToday = selectedDate === today;
   const isPast = selectedDate < today;
+  const isFuture = selectedDate > today;
   const tradingHoursOver = new Date().getHours() >= 16; // 4pm heuristic
+  const saveDisabled = saving || !activeAccount || isFuture;
 
-  // Load journal entry when date or account changes
+  function clearForm() {
+    setBias(null);
+    setPlannedPairs('');
+    setPreNotes('');
+    setMoodBefore(null);
+    setRulesReviewed(false);
+    setPostNotes('');
+    setMoodAfter(null);
+    setLessons('');
+    setFollowedRules(null);
+  }
+
+  // Load journal entry when selected date or account changes
   useEffect(() => {
-    if (!activeAccount?.id) return;
-    if (isToday) {
-      fetchTodayJournal(activeAccount.id);
+    let active = true;
+
+    async function loadJournal() {
+      if (!activeAccount?.id) {
+        clearForm();
+        return;
+      }
+
+      const journal = await fetchJournal(activeAccount.id, selectedDate);
+      if (!active) return;
+
+      if (!journal) {
+        clearForm();
+        return;
+      }
+
+      setBias(journal.market_bias);
+      setPlannedPairs(journal.planned_pairs?.join(', ') ?? '');
+      setPreNotes(journal.pre_market_notes ?? '');
+      setMoodBefore(journal.mood_before);
+      setRulesReviewed(journal.rules_reviewed);
+      setPostNotes(journal.post_market_notes ?? '');
+      setMoodAfter(journal.mood_after);
+      setLessons(journal.lessons_learned ?? '');
+      setFollowedRules(journal.followed_rules);
     }
-  }, [activeAccount?.id, isToday]);
 
-  // Populate form from stored journal
-  useEffect(() => {
-    const j = todayJournal;
-    if (!j || !isToday) return;
-    setBias(j.market_bias);
-    setPlannedPairs(j.planned_pairs?.join(', ') ?? '');
-    setPreNotes(j.pre_market_notes ?? '');
-    setMoodBefore(j.mood_before);
-    setRulesReviewed(j.rules_reviewed);
-    setPostNotes(j.post_market_notes ?? '');
-    setMoodAfter(j.mood_after);
-    setLessons(j.lessons_learned ?? '');
-    setFollowedRules(j.followed_rules);
-  }, [todayJournal, isToday]);
+    void loadJournal();
+    return () => { active = false; };
+  }, [activeAccount?.id, selectedDate, fetchJournal]);
 
   // Today's trade stats
   const dayTrades = trades.filter((t) => t.date === selectedDate && t.status === 'closed');
   const dayPnL = dayTrades.reduce((s, t) => s + (t.pnl ?? 0), 0);
 
   async function handleSave() {
-    if (!activeAccount?.id) return;
+    if (!activeAccount?.id || isFuture) return;
     setSaving(true);
-    const pairs = plannedPairs.split(',').map((s) => s.trim()).filter(Boolean);
-    await upsertJournal(activeAccount.id, selectedDate, {
-      market_bias: bias,
-      planned_pairs: pairs,
-      pre_market_notes: preNotes || null,
-      mood_before: moodBefore,
-      rules_reviewed: rulesReviewed,
-      post_market_notes: postNotes || null,
-      mood_after: moodAfter,
-      lessons_learned: lessons || null,
-      followed_rules: followedRules,
-    });
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setSaveError(null);
+    try {
+      const pairs = plannedPairs.split(',').map((s) => s.trim()).filter(Boolean);
+      const result = await upsertJournal(activeAccount.id, selectedDate, {
+        market_bias: bias,
+        planned_pairs: pairs,
+        pre_market_notes: preNotes || null,
+        mood_before: moodBefore,
+        rules_reviewed: rulesReviewed,
+        post_market_notes: postNotes || null,
+        mood_after: moodAfter,
+        lessons_learned: lessons || null,
+        followed_rules: followedRules,
+      });
+
+      if (result.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+        return;
+      }
+
+      setSaveError(result.error ?? 'Failed to save journal entry.');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unexpected save error.';
+      setSaveError(msg);
+    } finally {
+      setSaving(false);
+    }
   }
 
   function navigateDate(dir: -1 | 1) {
@@ -110,10 +148,10 @@ export default function JournalPage() {
           <h1 className="text-2xl font-bold text-white tracking-tight">Daily Journal</h1>
           <p className="text-sm text-gray-500 mt-1">Morning prep + evening review = elite consistency</p>
         </div>
-        {isToday && (
+        {!isFuture && (
           <button
             onClick={handleSave}
-            disabled={saving || !activeAccount}
+            disabled={saveDisabled}
             className={clsx(
               'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all',
               saved
@@ -169,6 +207,22 @@ export default function JournalPage() {
               <p className="text-xs text-gray-500">Win / Loss</p>
             </div>
           </div>
+        </div>
+      )}
+
+      {saveError && (
+        <div className="mb-4 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3">
+          <p className="text-xs text-red-300">{saveError}</p>
+        </div>
+      )}
+
+      {!activeAccount && (
+        <div className="mb-4 rounded-xl border border-yellow-500/25 bg-yellow-500/10 px-4 py-3">
+          <p className="text-xs text-yellow-300">
+            {accountsLoading
+              ? 'Loading your accounts...'
+              : 'No active account selected. Choose or create one in Settings to enable journal saving.'}
+          </p>
         </div>
       )}
 
@@ -356,11 +410,11 @@ export default function JournalPage() {
       </div>
 
       {/* Save button at bottom for convenience */}
-      {isToday && (
+      {!isFuture && (
         <div className="mt-5 flex justify-end">
           <button
             onClick={handleSave}
-            disabled={saving || !activeAccount}
+            disabled={saveDisabled}
             className={clsx(
               'flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all',
               saved
@@ -374,7 +428,7 @@ export default function JournalPage() {
         </div>
       )}
 
-      {!activeAccount && (
+      {!activeAccount && !accountsLoading && (
         <p className="text-xs text-gray-600 text-center mt-4">Create an account in Settings to save your journal.</p>
       )}
     </div>

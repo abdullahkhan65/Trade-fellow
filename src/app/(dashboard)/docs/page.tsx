@@ -167,7 +167,7 @@ export default function DocsPage() {
       {/* Header */}
       <div className="mb-7">
         <h1 className="text-2xl font-bold text-white tracking-tight">Trading Guide</h1>
-        <p className="text-sm text-gray-500 mt-1">How to use PropTrader + prop firm risk management tips</p>
+        <p className="text-sm text-gray-500 mt-1">How to use TradeFellow + prop firm risk management tips</p>
       </div>
 
       {/* Alert */}

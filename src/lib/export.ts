@@ -54,7 +54,7 @@ export async function exportToPDF(
   doc.setFontSize(20);
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.text('PROP TRADER', 15, 16);
+  doc.text('TRADEFELLOW', 15, 16);
 
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
@@ -158,7 +158,7 @@ export async function exportToPDF(
     doc.setFontSize(8);
     doc.setTextColor(75, 85, 99);
     doc.text(
-      `Page ${i} of ${pageCount} — Prop Trader Risk Calculator`,
+      `Page ${i} of ${pageCount} — TradeFellow Risk Calculator`,
       pageW / 2,
       doc.internal.pageSize.getHeight() - 8,
       { align: 'center' }

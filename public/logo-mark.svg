@@ -1,0 +1,16 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TradeFellow logo mark">
+  <defs>
+    <linearGradient id="tradefellow-mark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0EA5E9" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+  </defs>
+  <rect x="12" y="12" width="232" height="232" rx="54" fill="#0B1323" />
+  <rect x="26" y="26" width="204" height="204" rx="42" fill="url(#tradefellow-mark)" opacity="0.16" />
+  <path d="M58 172L108 116L136 142L198 86" fill="none" stroke="url(#tradefellow-mark)" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="58" cy="172" r="11" fill="#38BDF8" />
+  <circle cx="108" cy="116" r="11" fill="#38BDF8" />
+  <circle cx="136" cy="142" r="11" fill="#38BDF8" />
+  <circle cx="198" cy="86" r="11" fill="#38BDF8" />
+  <path d="M62 78H194" stroke="#93C5FD" stroke-opacity="0.35" stroke-width="10" stroke-linecap="round" />
+</svg>

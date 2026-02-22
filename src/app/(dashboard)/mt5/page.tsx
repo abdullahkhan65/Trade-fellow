@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { Upload, Plug, CheckCircle, AlertCircle, FileText, RefreshCw, Eye, EyeOff, Info } from 'lucide-react';
 import { parseMT5CSV, ParseResult } from '@/lib/csvParser';
 import { useTradeStore } from '@/store/useTradeStore';
@@ -15,6 +15,7 @@ export default function MT5Page() {
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ inserted: number; skipped: number } | null>(null);
+  const [showErrors, setShowErrors] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // MetaApi state
@@ -29,6 +30,21 @@ export default function MT5Page() {
 
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
+  const parseSummary = useMemo(() => {
+    if (!parseResult) return null;
+    const closed = parseResult.trades.filter((t) => t.status === 'closed');
+    const wins = closed.filter((t) => (t.pnl ?? 0) > 0).length;
+    const losses = closed.filter((t) => (t.pnl ?? 0) < 0).length;
+    const netPnl = closed.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
+    const ticketCounts = new Map<string, number>();
+    for (const trade of parseResult.trades) {
+      if (!trade.mt5_ticket) continue;
+      ticketCounts.set(trade.mt5_ticket, (ticketCounts.get(trade.mt5_ticket) ?? 0) + 1);
+    }
+    const duplicateTickets = [...ticketCounts.values()].filter((count) => count > 1).length;
+    return { closed: closed.length, wins, losses, netPnl, duplicateTickets };
+  }, [parseResult]);
+
   const handleFile = useCallback((file: File) => {
     if (file.size > MAX_FILE_SIZE) {
       setParseResult({ trades: [], errors: ['File is too large. Maximum size is 10 MB.'], total: 0 });
@@ -40,6 +56,7 @@ export default function MT5Page() {
       const result = parseMT5CSV(text);
       setParseResult(result);
       setImportResult(null);
+      setShowErrors(false);
     };
     reader.readAsText(file);
   }, []);
@@ -160,7 +177,7 @@ export default function MT5Page() {
             <p className="text-sm font-medium text-white mb-1">
               {dragging ? 'Drop your MT5 CSV here' : 'Drag & drop your MT5 CSV file'}
             </p>
-            <p className="text-xs text-gray-500">or click to browse — .csv files accepted</p>
+            <p className="text-xs text-gray-500">or click to browse — .csv, .htm, .html accepted</p>
             <input ref={fileRef} type="file" accept=".csv,.htm,.html" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }} />
           </div>
 
@@ -190,6 +207,62 @@ export default function MT5Page() {
                 </div>
               </div>
 
+              {parseSummary && (
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 px-5 py-4 border-b border-[#2a2f3e] bg-[#0b1018]">
+                  <div className="rounded-lg border border-[#2a2f3e] p-3">
+                    <p className="text-[11px] text-gray-500">Closed Trades</p>
+                    <p className="text-sm font-semibold text-white mt-1">{parseSummary.closed}</p>
+                  </div>
+                  <div className="rounded-lg border border-[#2a2f3e] p-3">
+                    <p className="text-[11px] text-gray-500">Wins / Losses</p>
+                    <p className="text-sm font-semibold mt-1">
+                      <span className="text-green-400">{parseSummary.wins}</span>
+                      <span className="text-gray-500"> / </span>
+                      <span className="text-red-400">{parseSummary.losses}</span>
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-[#2a2f3e] p-3">
+                    <p className="text-[11px] text-gray-500">Net P&L</p>
+                    <p className={clsx('text-sm font-semibold mt-1', parseSummary.netPnl >= 0 ? 'text-green-400' : 'text-red-400')}>
+                      {parseSummary.netPnl >= 0 ? '+' : ''}${parseSummary.netPnl.toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-[#2a2f3e] p-3">
+                    <p className="text-[11px] text-gray-500">Import Ready</p>
+                    <p className="text-sm font-semibold text-white mt-1">{parseResult.trades.length > 0 ? 'Yes' : 'No'}</p>
+                  </div>
+                  <div className="rounded-lg border border-[#2a2f3e] p-3">
+                    <p className="text-[11px] text-gray-500">Dup Tickets</p>
+                    <p className={clsx('text-sm font-semibold mt-1', parseSummary.duplicateTickets > 0 ? 'text-yellow-400' : 'text-green-400')}>
+                      {parseSummary.duplicateTickets}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {parseResult.errors.length > 0 && (
+                <div className="px-5 py-3 border-b border-[#2a2f3e] bg-red-500/5">
+                  <button
+                    onClick={() => setShowErrors((v) => !v)}
+                    className="text-xs font-medium text-red-300 hover:text-red-200"
+                  >
+                    {showErrors ? 'Hide' : 'Show'} parse errors ({parseResult.errors.length})
+                  </button>
+                  {showErrors && (
+                    <div className="mt-2 max-h-36 overflow-y-auto rounded-lg border border-red-500/20 bg-[#11161f] p-2">
+                      <ul className="space-y-1">
+                        {parseResult.errors.slice(0, 20).map((err, idx) => (
+                          <li key={`${idx}-${err}`} className="text-[11px] text-red-200 font-mono">{err}</li>
+                        ))}
+                        {parseResult.errors.length > 20 && (
+                          <li className="text-[11px] text-red-300/70">...and {parseResult.errors.length - 20} more</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {importResult && (
                 <div className={clsx('px-5 py-3 border-b border-[#2a2f3e] flex items-center gap-2 text-sm', importResult.inserted > 0 ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400')}>
                   <CheckCircle className="w-4 h-4 shrink-0" />
@@ -217,7 +290,15 @@ export default function MT5Page() {
                         <td className="px-3 py-2 text-gray-300">{t.positionSize}</td>
                         <td className="px-3 py-2 font-mono text-gray-300">{t.entry}</td>
                         <td className="px-3 py-2 font-mono text-gray-300">{t.exit ?? '—'}</td>
-                        <td className="px-3 py-2">—</td>
+                        <td className="px-3 py-2">
+                          {t.pnl !== null ? (
+                            <span className={t.pnl >= 0 ? 'text-green-400' : 'text-red-400'}>
+                              {t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(2)}
+                            </span>
+                          ) : (
+                            <span className="text-gray-500">—</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2">
                           <span className={clsx('px-1.5 py-0.5 rounded text-xs', t.status === 'open' ? 'bg-blue-500/10 text-blue-400' : 'bg-gray-500/10 text-gray-400')}>{t.status}</span>
                         </td>
