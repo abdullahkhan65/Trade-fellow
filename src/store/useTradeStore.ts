@@ -115,7 +115,7 @@ function tradeToDbRow(trade: Partial<Trade> & { account_id: string; user_id: str
 export const useTradeStore = create<TradeStore>()(
   persist(
     (set, get) => ({
-      trades: sampleTrades,
+      trades: [],
       settings: defaultSettings,
       loading: false,
 

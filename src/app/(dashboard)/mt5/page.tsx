@@ -27,7 +27,13 @@ export default function MT5Page() {
   const { bulkInsertTrades } = useTradeStore();
   const { activeAccountId, activeAccount, updateAccount } = useAccountStore();
 
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
   const handleFile = useCallback((file: File) => {
+    if (file.size > MAX_FILE_SIZE) {
+      setParseResult({ trades: [], errors: ['File is too large. Maximum size is 10 MB.'], total: 0 });
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;

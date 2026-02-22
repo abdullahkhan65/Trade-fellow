@@ -104,3 +104,90 @@ export interface EquityPoint {
   pnl: number;
   drawdown: number;
 }
+
+// ─── Goals ───────────────────────────────────────────────────────────────────
+
+export type GoalType = 'challenge' | 'monthly_profit' | 'consistency' | 'discipline' | 'custom';
+export type GoalStatus = 'active' | 'completed' | 'failed' | 'abandoned';
+
+export interface Goal {
+  id: string;
+  user_id: string;
+  account_id: string | null;
+  type: GoalType;
+  title: string;
+  description: string | null;
+  target_value: number | null;
+  target_unit: string | null;
+  start_date: string;
+  deadline: string | null;
+  config: Record<string, unknown>;
+  status: GoalStatus;
+  completed_at: string | null;
+  created_at: string;
+}
+
+// Per-type config shapes stored in goal.config
+export interface ChallengeConfig {
+  propFirm: string;
+  propFirmName: string;
+  phase: 'phase1' | 'phase2' | 'funded';
+  accountSize: number;
+  profitTargetPercent: number;
+  profitTargetAmount: number;
+  maxDailyLossPercent: number;
+  maxDrawdownPercent: number;
+  deadline: string;
+  tradingDaysPerWeek: number;
+  maxRiskPerTrade: number;
+  tradingDaysRemaining: number;
+  dailyProfitNeeded: number;
+}
+
+export interface MonthlyProfitConfig {
+  targetType: 'amount' | 'percent';
+  targetAmount: number;
+  targetPercent: number;
+  deadline: string;
+  startingBalance: number;
+}
+
+export interface ConsistencyConfig {
+  targetDays: number;
+  greenDayDefinition: 'any_profit' | 'min_amount' | 'min_percent';
+  greenDayMinAmount?: number;
+  greenDayMinPercent?: number;
+}
+
+export interface DisciplineConfig {
+  mainIssue: 'overtrading' | 'revenge_trading' | 'fomo' | 'poor_exits' | 'not_following_plan';
+  maxDailyTrades: number;
+  tradingRules: string[];
+  successTargetDays: number;
+}
+
+export interface CustomConfig {
+  measureType: 'amount' | 'percent' | 'days' | 'trades' | 'r_multiples';
+  targetValue: number;
+  notes: string;
+}
+
+// ─── Daily Journal ────────────────────────────────────────────────────────────
+
+export interface DailyJournal {
+  id: string;
+  user_id: string;
+  account_id: string;
+  date: string;
+  market_bias: 'bullish' | 'bearish' | 'neutral' | 'mixed' | null;
+  planned_pairs: string[];
+  pre_market_notes: string | null;
+  mood_before: number | null;
+  rules_reviewed: boolean;
+  post_market_notes: string | null;
+  mood_after: number | null;
+  lessons_learned: string | null;
+  followed_rules: boolean | null;
+  created_at: string;
+  updated_at: string;
+}

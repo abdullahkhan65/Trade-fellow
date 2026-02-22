@@ -36,7 +36,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // Protected routes — if not logged in, redirect to login
-  const publicRoutes = ['/login', '/register', '/forgot-password', '/reset-password'];
+  const publicRoutes = ['/login', '/register', '/forgot-password', '/reset-password', '/auth'];
   if (!user && !publicRoutes.some((r) => pathname.startsWith(r))) {
     return NextResponse.redirect(new URL('/login', request.url));
   }

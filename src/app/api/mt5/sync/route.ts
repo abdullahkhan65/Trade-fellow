@@ -1,19 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+function isValidToken(token: unknown): token is string {
+  return typeof token === 'string' && token.length > 10 && token.length < 2048;
+}
+
+function isValidAccountId(id: unknown): id is string {
+  return typeof id === 'string' && /^[a-zA-Z0-9-_]{4,64}$/.test(id);
+}
+
+function isValidUUID(id: unknown): id is string {
+  return typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { token, accountId, propAccountId } = await req.json();
+    const body = await req.json();
+    const { token, accountId, propAccountId } = body;
 
-    if (!token || !accountId || !propAccountId) {
-      return NextResponse.json({ error: 'Missing token, accountId, or propAccountId' }, { status: 400 });
+    if (!isValidToken(token)) {
+      return NextResponse.json({ error: 'Invalid or missing token' }, { status: 400 });
+    }
+    if (!isValidAccountId(accountId)) {
+      return NextResponse.json({ error: 'Invalid or missing accountId' }, { status: 400 });
+    }
+    if (!isValidUUID(propAccountId)) {
+      return NextResponse.json({ error: 'Invalid or missing propAccountId' }, { status: 400 });
     }
 
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    // Fetch deals from MetaApi REST API
+    // Defense in depth: verify propAccountId belongs to this user (RLS also enforces this)
+    const { data: account } = await supabase
+      .from('accounts')
+      .select('id')
+      .eq('id', propAccountId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (!account) {
+      return NextResponse.json({ error: 'Account not found' }, { status: 403 });
+    }
+
     const baseUrl = `https://mt-client-api-v1.agiliumtrade.agiliumtrade.ai/users/current/accounts/${accountId}/history-deals/time`;
     const fromDate = new Date();
     fromDate.setFullYear(fromDate.getFullYear() - 1);
@@ -25,13 +55,14 @@ export async function POST(req: NextRequest) {
     );
 
     if (!res.ok) {
+      // Log detail server-side only — never send raw API errors to client
       const errText = await res.text();
-      return NextResponse.json({ error: `MetaApi error: ${res.status} ${errText}` }, { status: 502 });
+      console.error(`[MT5 sync] MetaApi error: status=${res.status}`, errText.slice(0, 500));
+      return NextResponse.json({ error: 'Failed to fetch data from MetaApi. Check your token and account ID.' }, { status: 502 });
     }
 
     const deals: MetaApiDeal[] = await res.json();
 
-    // Filter only buy/sell deals (not balance/commission/etc)
     const tradeDealTypes = ['DEAL_TYPE_BUY', 'DEAL_TYPE_SELL'];
     const entryDeals = deals.filter((d) => tradeDealTypes.includes(d.type) && d.entryType === 'DEAL_ENTRY_OUT');
 
@@ -39,27 +70,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ inserted: 0, skipped: 0 });
     }
 
-    // Map to trades
     const rows = entryDeals.map((deal) => ({
       account_id: propAccountId,
       user_id: user.id,
       date: new Date(deal.time).toISOString().slice(0, 10),
-      symbol: deal.symbol ?? 'UNKNOWN',
+      // Sanitize symbol — only allow safe characters
+      symbol: String(deal.symbol ?? 'UNKNOWN').toUpperCase().replace(/[^A-Z0-9./]/g, '').slice(0, 20),
       direction: deal.type === 'DEAL_TYPE_BUY' ? 'long' : 'short',
-      position_size: deal.volume ?? 0,
-      entry: deal.price ?? 0,
-      stop_loss: deal.stopLoss ?? 0,
-      take_profit: deal.takeProfit ?? null,
-      exit: deal.price ?? null,
-      pnl: deal.profit ?? null,
+      position_size: Math.max(0, Number(deal.volume) || 0),
+      entry: Math.max(0, Number(deal.price) || 0),
+      stop_loss: Math.max(0, Number(deal.stopLoss) || 0),
+      take_profit: deal.takeProfit != null ? Math.max(0, Number(deal.takeProfit)) : null,
+      exit: deal.price != null ? Math.max(0, Number(deal.price)) : null,
+      pnl: deal.profit != null ? Number(deal.profit) : null,
       risk_amount: null,
       risk_percent: null,
       r_multiple: null,
       status: 'closed',
       trading_style: 'day',
-      notes: `MetaApi sync — Order #${deal.orderId ?? deal.id}`,
+      notes: `MetaApi sync — Order #${String(deal.orderId ?? deal.id ?? '').slice(0, 50)}`,
       tags: ['metaapi-sync'],
-      mt5_ticket: deal.id?.toString() ?? null,
+      mt5_ticket: deal.id != null ? String(deal.id).slice(0, 50) : null,
     }));
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -68,11 +99,15 @@ export async function POST(req: NextRequest) {
       .upsert(rows, { onConflict: 'mt5_ticket', ignoreDuplicates: true })
       .select();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      console.error('[MT5 sync] Supabase error:', error.message);
+      return NextResponse.json({ error: 'Failed to save trades. Please try again.' }, { status: 500 });
+    }
 
     return NextResponse.json({ inserted: data?.length ?? 0, skipped: rows.length - (data?.length ?? 0) });
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+    console.error('[MT5 sync] Unexpected error:', e);
+    return NextResponse.json({ error: 'An unexpected error occurred. Please try again.' }, { status: 500 });
   }
 }
 

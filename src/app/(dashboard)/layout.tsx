@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import Sidebar from '@/components/Sidebar';
+import DataInit from '@/components/DataInit';
 import '../globals.css';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -13,6 +14,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex min-h-screen">
+      <DataInit />
       <Sidebar user={user} />
       <main className="flex-1 overflow-auto">
         {children}

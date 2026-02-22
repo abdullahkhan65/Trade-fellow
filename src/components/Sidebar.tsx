@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, BookOpen, BarChart3, Settings, FileText,
-  Activity, TrendingUp, Shield, Calendar, Calculator, Plug, LogOut, User
+  Activity, TrendingUp, Shield, Calendar, Calculator, Plug, LogOut, User,
+  Trophy, Flame
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useTradeStore } from '@/store/useTradeStore';
@@ -17,6 +18,8 @@ import type { User as SupabaseUser } from '@supabase/supabase-js';
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/trades', label: 'Trade Journal', icon: BookOpen },
+  { href: '/goals', label: 'Goals', icon: Trophy },
+  { href: '/journal', label: 'Daily Journal', icon: Flame },
   { href: '/charts', label: 'Analytics', icon: BarChart3 },
   { href: '/calendar', label: 'Calendar', icon: Calendar },
   { href: '/calculator', label: 'Calculator', icon: Calculator },
@@ -27,6 +30,21 @@ const navItems = [
 
 interface SidebarProps {
   user?: SupabaseUser | null;
+}
+
+function computeGreenStreak(trades: import('@/types').Trade[]): number {
+  const closed = trades.filter((t) => t.status === 'closed' && t.pnl != null);
+  const byDate = new Map<string, number>();
+  for (const t of closed) {
+    byDate.set(t.date, (byDate.get(t.date) ?? 0) + (t.pnl ?? 0));
+  }
+  const dates = [...byDate.keys()].sort().reverse();
+  let streak = 0;
+  for (const date of dates) {
+    if ((byDate.get(date) ?? 0) > 0) streak++;
+    else break;
+  }
+  return streak;
 }
 
 export default function Sidebar({ user }: SidebarProps) {
@@ -48,6 +66,7 @@ export default function Sidebar({ user }: SidebarProps) {
 
   const metrics = computeMetrics(trades, settings);
   const isRisk = metrics.dailyLossPercent >= 80 || metrics.currentDrawdown >= settings.maxDrawdownPercent * 0.8;
+  const greenStreak = computeGreenStreak(trades);
 
   const handleSignOut = async () => {
     const supabase = createClient();
@@ -101,6 +120,14 @@ export default function Sidebar({ user }: SidebarProps) {
               {metrics.winRate.toFixed(0)}%
             </span>
           </div>
+          {greenStreak > 0 && (
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500 flex items-center gap-1.5">
+                <Flame className="w-3 h-3 text-orange-400" /> Streak
+              </span>
+              <span className="font-semibold text-orange-400">{greenStreak}d 🔥</span>
+            </div>
+          )}
         </div>
 
         {isRisk && (
